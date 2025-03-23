@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <title>YouTube Video Search (Wider URL Column)</title>
+  <title>YouTube Video Search (Export, Clear on Next)</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;600&family=Open+Sans:wght@400;600&display=swap" rel="stylesheet">
@@ -114,11 +114,10 @@
 
     /* Make the URL column wider */
     .url-col {
-      width: 250px;       /* or whatever width you prefer */
+      width: 250px;
       min-width: 250px;
-      word-wrap: break-word; /* ensures text breaks if it exceeds the width */
+      word-wrap: break-word;
     }
-    /* Style the link in the URL column */
     .url-col a {
       color: #1a0dab;
       text-decoration: none;
@@ -132,13 +131,14 @@
   <div class="container">
     <header>
       <h1>YouTube Video Search</h1>
-      <p>View video details with a clean, responsive layout and a wider URL column.</p>
+      <p>Export results to Excel (CSV), clear old results on Next, and note that max results per request is 50.</p>
     </header>
     
     <section id="search-container">
       <input type="text" id="query" placeholder="Search for videos...">
       <button id="search-button">Search</button>
       <button id="next-button" disabled>Next</button>
+      <button id="export-button" disabled>Export to Excel</button>
     </section>
     
     <!-- Detailed Video Info (Table Only) -->
@@ -148,17 +148,13 @@
   <!-- Load the Google API client library -->
   <script src="https://apis.google.com/js/api.js"></script>
   <script>
-    /* 
-      The JavaScript logic stays the same as your current code, 
-      with fallback for 403. We only added the .url-col class 
-      in the table generation below.
-    */
-
-    // 1. Multiple API Keys for fallback
+    /****************************************************
+     * 1. MULTIPLE API KEYS FOR FALLBACK ON ANY 403     *
+     ****************************************************/
     const apiKeys = [
-      'AIzaSyD-DC9kq5vXWF6HrO9Uy-QSMxnVHYzuqoU',
-      'AIzaSyDEL_B3gYUF33EkeSqkr8hPVMJ0L9mZGhw',
-      'AIzaSyBK2GkCrlII6IAHOgOh5XYhFkPHz1CAdIk'
+      'AIzaSyD-DC9kq5vXWF6HrO9Uy-QSMxnVHYzuqoU',  // Primary
+      'AIzaSyDEL_B3gYUF33EkeSqkr8hPVMJ0L9mZGhw',  // Fallback 1
+      'AIzaSyBK2GkCrlII6IAHOgOh5XYhFkPHz1CAdIk'   // Fallback 2
     ];
     let currentKeyIndex = 0;
     let currentApiKey = apiKeys[currentKeyIndex];
@@ -167,20 +163,28 @@
     const videoDetailsContainer = document.getElementById('video-details');
     const searchButton = document.getElementById('search-button');
     const nextButton = document.getElementById('next-button');
+    const exportButton = document.getElementById('export-button');
     const queryInput = document.getElementById('query');
 
-    // 2. Init YouTube client
+    /****************************************************
+     * 2. INIT YOUTUBE CLIENT                           *
+     ****************************************************/
     function initClient(apiKey, callback) {
       gapi.client.setApiKey(apiKey);
       gapi.client.load('youtube', 'v3', callback);
     }
 
-    // 3. Search videos
+    /****************************************************
+     * 3. SEARCH VIDEOS (search.list) WITH CLEAR ON NEXT *
+     ****************************************************/
     function searchVideos(query, token = '') {
+      // Always clear previous results (including on Next)
+      videoDetailsContainer.innerHTML = '';
+
       const params = {
         q: query,
         part: 'snippet',
-        maxResults: 50,
+        maxResults: 50, // 50 is the max allowed by the YouTube search.list API
         type: 'video'
       };
       if (token) {
@@ -189,15 +193,15 @@
       const request = gapi.client.youtube.search.list(params);
 
       request.execute(response => {
-        // Check for errors
         if (response.error) {
           console.error('API Error:', response.error);
+          // If it's a 403, try the next key if available
           if (response.error.code === 403 && currentKeyIndex < apiKeys.length - 1) {
             console.warn('Got 403 for key:', currentApiKey, 'Switching to next key.');
             currentKeyIndex++;
             currentApiKey = apiKeys[currentKeyIndex];
             initClient(currentApiKey, () => {
-              searchVideos(query, token); // retry
+              searchVideos(query, token); // retry with new key
             });
             return;
           } else {
@@ -206,14 +210,11 @@
           }
         }
 
-        // If fresh search, clear old results
-        if (!token) {
-          videoDetailsContainer.innerHTML = '';
-        }
-
+        // Update pageToken for pagination
         pageToken = response.result.nextPageToken || '';
         nextButton.disabled = !pageToken;
 
+        // Collect video IDs
         const videoIds = [];
         if (response.result && response.result.items) {
           response.result.items.forEach(item => {
@@ -222,13 +223,20 @@
             }
           });
         }
+
+        // Fetch details if we have IDs
         if (videoIds.length) {
           getVideoDetails(videoIds);
+        } else {
+          // If no results, disable export
+          exportButton.disabled = true;
         }
       });
     }
 
-    // 4. Get video details
+    /****************************************************
+     * 4. GET VIDEO DETAILS (videos.list)               *
+     ****************************************************/
     function getVideoDetails(videoIds) {
       const params = {
         part: 'snippet,statistics,contentDetails',
@@ -245,7 +253,7 @@
             currentKeyIndex++;
             currentApiKey = apiKeys[currentKeyIndex];
             initClient(currentApiKey, () => {
-              getVideoDetails(videoIds); // retry
+              getVideoDetails(videoIds); // retry with new key
             });
             return;
           } else {
@@ -256,7 +264,6 @@
 
         let tableHTML = '<table><thead><tr>';
         tableHTML += '<th>Thumbnail</th><th>Title</th><th>Channel</th><th>Published</th><th>Views</th><th>Duration</th>';
-        // Notice we add the .url-col class to the <th>
         tableHTML += '<th class="url-col">URL</th>';
         tableHTML += '</tr></thead><tbody>';
 
@@ -278,23 +285,63 @@
                 <td>${published}</td>
                 <td>${views}</td>
                 <td>${duration}</td>
-                <!-- Also apply the .url-col class to the <td> -->
                 <td class="url-col"><a href="${videoUrl}" target="_blank">${videoUrl}</a></td>
               </tr>
             `;
           });
         }
         tableHTML += '</tbody></table>';
-        videoDetailsContainer.innerHTML += tableHTML;
+        videoDetailsContainer.innerHTML = tableHTML;
+
+        // If we got results, enable Export
+        exportButton.disabled = false;
       });
     }
 
-    // Utility: format durations
+    /****************************************************
+     * 5. EXPORT TABLE TO EXCEL (CSV)                   *
+     ****************************************************/
+    function exportToExcel(filename = 'YouTubeResults.csv') {
+      const table = document.querySelector("#video-details table");
+      if (!table) {
+        alert('No table data to export.');
+        return;
+      }
+      let csv = [];
+      const rows = table.querySelectorAll("tr");
+
+      for (let i = 0; i < rows.length; i++) {
+        let row = [], cols = rows[i].querySelectorAll("th, td");
+        for (let j = 0; j < cols.length; j++) {
+          // Escape quotes
+          let text = cols[j].innerText.replace(/"/g, '""');
+          row.push(`"${text}"`);
+        }
+        csv.push(row.join(","));
+      }
+      const csvString = csv.join("\n");
+      const blob = new Blob([csvString], { type: 'text/csv' });
+      const url = window.URL.createObjectURL(blob);
+
+      const link = document.createElement("a");
+      link.setAttribute("href", url);
+      link.setAttribute("download", filename);
+      link.style.display = "none";
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      window.URL.revokeObjectURL(url);
+    }
+
+    /****************************************************
+     * 6. UTILITY: FORMAT ISO 8601 DURATIONS            *
+     ****************************************************/
     function formatDuration(isoDuration) {
+      // Examples: PT1H2M3S, PT15M33S
       const matches = isoDuration.match(/PT(?:(\d+)H)?(?:(\d+)M)?(?:(\d+)S)?/);
-      const hours = parseInt(matches[1] || 0, 10);
-      const minutes = parseInt(matches[2] || 0, 10);
-      const seconds = parseInt(matches[3] || 0, 10);
+      const hours = parseInt(matches?.[1] || 0, 10);
+      const minutes = parseInt(matches?.[2] || 0, 10);
+      const seconds = parseInt(matches?.[3] || 0, 10);
 
       let formatted = '';
       if (hours > 0) {
@@ -305,10 +352,14 @@
       return formatted;
     }
 
-    // 6. Button handlers & onload
+    /****************************************************
+     * 7. BUTTON HANDLERS & ONLOAD                      *
+     ****************************************************/
+    // Search button
     searchButton.addEventListener('click', () => {
       const query = queryInput.value.trim();
       if (query) {
+        // Reset to the first key on a new search
         currentKeyIndex = 0;
         currentApiKey = apiKeys[currentKeyIndex];
         initClient(currentApiKey, () => {
@@ -317,6 +368,7 @@
       }
     });
 
+    // Next page button
     nextButton.addEventListener('click', () => {
       const query = queryInput.value.trim();
       if (query && pageToken) {
@@ -324,6 +376,12 @@
       }
     });
 
+    // Export button
+    exportButton.addEventListener('click', () => {
+      exportToExcel();
+    });
+
+    // Load the API client library when the window loads
     window.onload = function() {
       gapi.load('client', () => {
         initClient(currentApiKey, () => {
