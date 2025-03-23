@@ -1,0 +1,195 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>YouTube Video Search</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@300;400;500&display=swap" rel="stylesheet">
+  <style>
+    /* Global Styles */
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+    body {
+      font-family: 'Montserrat', sans-serif;
+      background: linear-gradient(135deg, #667eea, #764ba2);
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 20px;
+    }
+    .container {
+      background: #fff;
+      border-radius: 12px;
+      box-shadow: 0 10px 20px rgba(0,0,0,0.2);
+      width: 100%;
+      max-width: 600px;
+      padding: 2rem;
+    }
+    header {
+      text-align: center;
+      margin-bottom: 1.5rem;
+    }
+    header h1 {
+      font-size: 2rem;
+      color: #333;
+      margin-bottom: 0.5rem;
+    }
+    header p {
+      color: #777;
+    }
+    /* Search Section */
+    #search-container {
+      display: flex;
+      gap: 0.5rem;
+      margin-bottom: 1.5rem;
+    }
+    #query {
+      flex: 1;
+      padding: 0.75rem;
+      font-size: 1rem;
+      border: 2px solid #ddd;
+      border-radius: 8px;
+      transition: border-color 0.3s;
+    }
+    #query:focus {
+      outline: none;
+      border-color: #667eea;
+    }
+    button {
+      padding: 0.75rem 1rem;
+      border: none;
+      background: #667eea;
+      color: #fff;
+      border-radius: 8px;
+      font-size: 1rem;
+      cursor: pointer;
+      transition: background 0.3s;
+    }
+    button:hover {
+      background: #556cd6;
+    }
+    button:disabled {
+      background: #ccc;
+      cursor: not-allowed;
+    }
+    /* Results Section */
+    #results {
+      list-style: none;
+    }
+    #results li {
+      background: #f9f9f9;
+      padding: 1rem;
+      border-radius: 8px;
+      margin-bottom: 0.75rem;
+      transition: transform 0.3s, box-shadow 0.3s;
+    }
+    #results li:hover {
+      transform: translateY(-3px);
+      box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+    }
+    #results li a {
+      text-decoration: none;
+      color: #333;
+      font-weight: 500;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <header>
+      <h1>YouTube Video Search</h1>
+      <p>Discover videos with style and ease.</p>
+    </header>
+    <section id="search-container">
+      <input type="text" id="query" placeholder="Search for videos...">
+      <button id="search-button">Search</button>
+      <button id="next-button" disabled>Next</button>
+    </section>
+    <section>
+      <ul id="results"></ul>
+    </section>
+  </div>
+
+  <!-- Load the Google API client library -->
+  <script src="https://apis.google.com/js/api.js"></script>
+  <script>
+    let pageToken = '';
+    const API_KEY = 'AIzaSyD-DC9kq5vXWF6HrO9Uy-QSMxnVHYzuqoU'; // Replace with your API key
+    const resultsContainer = document.getElementById('results');
+    const searchButton = document.getElementById('search-button');
+    const nextButton = document.getElementById('next-button');
+    const queryInput = document.getElementById('query');
+
+    // Initialize the API client and load the YouTube API
+    function initClient() {
+      gapi.client.setApiKey(API_KEY);
+      gapi.client.load('youtube', 'v3', () => {
+        console.log('YouTube API loaded.');
+      });
+    }
+
+    // Function to perform a video search
+    function searchVideos(query, token = '') {
+      const params = {
+        q: query,
+        part: 'snippet',
+        maxResults: 50,
+        type: 'video'
+      };
+      if (token) {
+        params.pageToken = token;
+      }
+      const request = gapi.client.youtube.search.list(params);
+      request.execute(response => {
+        if (response.error) {
+          console.error('API Error:', response.error);
+          alert('Error: ' + response.error.message);
+          return;
+        }
+        // If it's a new search, clear previous results
+        if (!token) {
+          resultsContainer.innerHTML = '';
+        }
+        // Update pageToken for the next page (if available)
+        pageToken = response.result.nextPageToken || '';
+        nextButton.disabled = !pageToken;
+        // Append each video result to the results list
+        response.result.items.forEach(item => {
+          if (item.id && item.id.videoId) {
+            const videoUrl = 'https://www.youtube.com/watch?v=' + item.id.videoId;
+            const li = document.createElement('li');
+            li.innerHTML = `<a href="${videoUrl}" target="_blank">${item.snippet.title}</a>`;
+            resultsContainer.appendChild(li);
+          }
+        });
+      });
+    }
+
+    // Event listener for the Search button
+    searchButton.addEventListener('click', () => {
+      const query = queryInput.value.trim();
+      if (query) {
+        searchVideos(query);
+      }
+    });
+
+    // Event listener for the Next button
+    nextButton.addEventListener('click', () => {
+      const query = queryInput.value.trim();
+      if (query && pageToken) {
+        searchVideos(query, pageToken);
+      }
+    });
+
+    // Load the API client library when the window loads
+    window.onload = function() {
+      gapi.load('client', initClient);
+    };
+  </script>
+</body>
+</html>
