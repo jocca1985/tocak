@@ -2,13 +2,17 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <title>YouTube Video Search with Multiple Key Fallback</title>
+  <title>YouTube Video Search (Fallback on Any 403)</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@300;400;500&display=swap" rel="stylesheet">
   <style>
     /* Global Styles */
-    * { box-sizing: border-box; margin: 0; padding: 0; }
+    * {
+      box-sizing: border-box; 
+      margin: 0; 
+      padding: 0;
+    }
     body {
       font-family: 'Montserrat', sans-serif;
       background: linear-gradient(135deg, #667eea, #764ba2);
@@ -27,8 +31,14 @@
       text-align: center;
       margin-bottom: 1.5rem;
     }
-    header h1 { font-size: 2rem; color: #333; margin-bottom: 0.5rem; }
-    header p { color: #777; }
+    header h1 {
+      font-size: 2rem; 
+      color: #333; 
+      margin-bottom: 0.5rem;
+    }
+    header p {
+      color: #777;
+    }
     /* Search Section */
     #search-container {
       display: flex;
@@ -43,7 +53,10 @@
       border-radius: 8px;
       transition: border-color 0.3s;
     }
-    #query:focus { outline: none; border-color: #667eea; }
+    #query:focus {
+      outline: none; 
+      border-color: #667eea;
+    }
     button {
       padding: 0.75rem 1rem;
       border: none;
@@ -54,8 +67,13 @@
       cursor: pointer;
       transition: background 0.3s;
     }
-    button:hover { background: #556cd6; }
-    button:disabled { background: #ccc; cursor: not-allowed; }
+    button:hover {
+      background: #556cd6;
+    }
+    button:disabled {
+      background: #ccc;
+      cursor: not-allowed;
+    }
     /* Video Details Table */
     #video-details {
       margin-bottom: 2rem;
@@ -64,79 +82,59 @@
       width: 100%;
       border-collapse: collapse;
     }
-    #video-details th, #video-details td {
+    #video-details th, 
+    #video-details td {
       padding: 8px;
       border: 1px solid #ddd;
       text-align: left;
     }
-    #video-details th { background-color: #f2f2f2; }
-    #video-details img { max-width: 80px; }
-    /* Results List (optional) */
-    #results { list-style: none; padding: 0; }
-    #results li {
-      background: #f9f9f9;
-      padding: 1rem;
-      border-radius: 8px;
-      margin-bottom: 0.75rem;
-      transition: transform 0.3s, box-shadow 0.3s;
+    #video-details th {
+      background-color: #f2f2f2;
     }
-    #results li:hover {
-      transform: translateY(-3px);
-      box-shadow: 0 4px 12px rgba(0,0,0,0.1);
-    }
-    #results li a {
-      text-decoration: none;
-      color: #333;
-      font-weight: 500;
+    #video-details img {
+      max-width: 80px;
     }
   </style>
 </head>
 <body>
   <div class="container">
     <header>
-      <h1>YouTube Video Search (Multiple Key Fallback)</h1>
-      <p>Search videos, then fetch detailed info (stats, duration) in a table.</p>
+      <h1>YouTube Video Search</h1>
+      <p>Automatically switch to the next API key whenever you get a 403.</p>
     </header>
     
-    <!-- Search Controls -->
     <section id="search-container">
       <input type="text" id="query" placeholder="Search for videos...">
       <button id="search-button">Search</button>
       <button id="next-button" disabled>Next</button>
     </section>
     
-    <!-- Detailed Video Info -->
+    <!-- Detailed Video Info (Table Only) -->
     <section id="video-details"></section>
-    
-    <!-- Optional: Simple List for video URLs -->
-    <section>
-      <ul id="results"></ul>
-    </section>
   </div>
 
   <!-- Load the Google API client library -->
   <script src="https://apis.google.com/js/api.js"></script>
   <script>
     /****************************************************
-     *      1. SET UP MULTIPLE API KEYS AND FALLBACK    *
+     *        1. MULTIPLE API KEYS FOR FALLBACK         *
      ****************************************************/
-    const apiKeys = [ // Primary
-      'AIzaSyDEL_B3gYUF33EkeSqkr8hPVMJ0L9mZGhw', 
-      'AIzaSyD-DC9kq5vXWF6HrO9Uy-QSMxnVHYzuqoU', // Fallback 1
+    const apiKeys = [
+      'AIzaSyD-DC9kq5vXWF6HrO9Uy-QSMxnVHYzuqoU',  // Primary
+      'AIzaSyDEL_B3gYUF33EkeSqkr8hPVMJ0L9mZGhw',  // Fallback 1
       'AIzaSyBK2GkCrlII6IAHOgOh5XYhFkPHz1CAdIk'   // Fallback 2
     ];
     let currentKeyIndex = 0;
     let currentApiKey = apiKeys[currentKeyIndex];
 
     let pageToken = '';
-    const resultsContainer = document.getElementById('results');
     const videoDetailsContainer = document.getElementById('video-details');
     const searchButton = document.getElementById('search-button');
     const nextButton = document.getElementById('next-button');
     const queryInput = document.getElementById('query');
 
     /****************************************************
-     *          2. INITIALIZE YOUTUBE CLIENT            *
+     *           2. INIT YOUTUBE CLIENT                 *
      ****************************************************/
     function initClient(apiKey, callback) {
       gapi.client.setApiKey(apiKey);
@@ -159,13 +157,12 @@
       const request = gapi.client.youtube.search.list(params);
 
       request.execute(response => {
-        if (response.error && response.error.errors) {
-          // Check for quota errors
-          const quotaError = response.error.errors.find(e =>
-            e.reason === "quotaExceeded" || e.reason === "dailyLimitExceeded"
-          );
-          if (quotaError && currentKeyIndex < apiKeys.length - 1) {
-            console.warn('Quota exceeded for key:', currentApiKey, 'Switching to next key.');
+        // Check for errors
+        if (response.error) {
+          console.error('API Error:', response.error);
+          // If it's a 403, try the next key if available
+          if (response.error.code === 403 && currentKeyIndex < apiKeys.length - 1) {
+            console.warn('Got 403 for key:', currentApiKey, 'Switching to next key.');
             currentKeyIndex++;
             currentApiKey = apiKeys[currentKeyIndex];
             initClient(currentApiKey, () => {
@@ -173,15 +170,13 @@
             });
             return;
           } else {
-            console.error('API Error:', response.error);
             alert('Error: ' + response.error.message);
             return;
           }
         }
 
-        // Clear previous results if this is a fresh search
+        // If it's a fresh search, clear previous table
         if (!token) {
-          resultsContainer.innerHTML = '';
           videoDetailsContainer.innerHTML = '';
         }
 
@@ -189,20 +184,15 @@
         pageToken = response.result.nextPageToken || '';
         nextButton.disabled = !pageToken;
 
-        // Extract video IDs
+        // Gather video IDs to fetch details
         const videoIds = [];
-        response.result.items.forEach(item => {
-          if (item.id && item.id.videoId) {
-            videoIds.push(item.id.videoId);
-            // Optional: Also show a simple list of video URLs
-            const videoUrl = 'https://www.youtube.com/watch?v=' + item.id.videoId;
-            const li = document.createElement('li');
-            li.innerHTML = `<a href="${videoUrl}" target="_blank">${item.snippet.title}</a>`;
-            resultsContainer.appendChild(li);
-          }
-        });
-
-        // Get detailed info for these videos
+        if (response.result && response.result.items) {
+          response.result.items.forEach(item => {
+            if (item.id && item.id.videoId) {
+              videoIds.push(item.id.videoId);
+            }
+          });
+        }
         if (videoIds.length) {
           getVideoDetails(videoIds);
         }
@@ -221,13 +211,12 @@
       const request = gapi.client.youtube.videos.list(params);
 
       request.execute(response => {
-        if (response.error && response.error.errors) {
-          // Check for quota errors here too
-          const quotaError = response.error.errors.find(e =>
-            e.reason === "quotaExceeded" || e.reason === "dailyLimitExceeded"
-          );
-          if (quotaError && currentKeyIndex < apiKeys.length - 1) {
-            console.warn('Quota exceeded for key:', currentApiKey, 'Switching to next key.');
+        // Check for errors
+        if (response.error) {
+          console.error('API Error:', response.error);
+          // If it's a 403, try the next key if available
+          if (response.error.code === 403 && currentKeyIndex < apiKeys.length - 1) {
+            console.warn('Got 403 for key:', currentApiKey, 'Switching to next key.');
             currentKeyIndex++;
             currentApiKey = apiKeys[currentKeyIndex];
             initClient(currentApiKey, () => {
@@ -235,39 +224,39 @@
             });
             return;
           } else {
-            console.error('API Error:', response.error);
             alert('Error: ' + response.error.message);
             return;
           }
         }
 
-        // Build a table with the detailed info
+        // Build a table with detailed info
         let tableHTML = '<table><thead><tr>';
         tableHTML += '<th>Thumbnail</th><th>Title</th><th>Channel</th><th>Published</th><th>Views</th><th>Duration</th>';
         tableHTML += '</tr></thead><tbody>';
 
-        response.result.items.forEach(item => {
-          const thumbnailUrl = item.snippet.thumbnails.default.url;
-          const title = item.snippet.title;
-          const channel = item.snippet.channelTitle;
-          const published = new Date(item.snippet.publishedAt).toLocaleDateString();
-          const views = item.statistics.viewCount || 'N/A';
-          const duration = formatDuration(item.contentDetails.duration);
+        if (response.result && response.result.items) {
+          response.result.items.forEach(item => {
+            const thumbnailUrl = item.snippet.thumbnails.default.url;
+            const title = item.snippet.title;
+            const channel = item.snippet.channelTitle;
+            const published = new Date(item.snippet.publishedAt).toLocaleDateString();
+            const views = item.statistics.viewCount || 'N/A';
+            const duration = formatDuration(item.contentDetails.duration);
 
-          tableHTML += `
-            <tr>
-              <td><img src="${thumbnailUrl}" alt="Thumbnail"></td>
-              <td>${title}</td>
-              <td>${channel}</td>
-              <td>${published}</td>
-              <td>${views}</td>
-              <td>${duration}</td>
-            </tr>
-          `;
-        });
-
+            tableHTML += `
+              <tr>
+                <td><img src="${thumbnailUrl}" alt="Thumbnail"></td>
+                <td>${title}</td>
+                <td>${channel}</td>
+                <td>${published}</td>
+                <td>${views}</td>
+                <td>${duration}</td>
+              </tr>
+            `;
+          });
+        }
         tableHTML += '</tbody></table>';
-        videoDetailsContainer.innerHTML = tableHTML;
+        videoDetailsContainer.innerHTML += tableHTML;
       });
     }
 
@@ -275,7 +264,7 @@
      *     5. UTILITY: FORMAT ISO 8601 DURATIONS        *
      ****************************************************/
     function formatDuration(isoDuration) {
-      // Example: PT1H2M3S or PT15M33S
+      // Examples: PT1H2M3S, PT15M33S
       const matches = isoDuration.match(/PT(?:(\d+)H)?(?:(\d+)M)?(?:(\d+)S)?/);
       const hours = parseInt(matches[1] || 0, 10);
       const minutes = parseInt(matches[2] || 0, 10);
@@ -291,13 +280,13 @@
     }
 
     /****************************************************
-     *       6. SET UP BUTTONS & LOAD CLIENT            *
+     *       6. BUTTON HANDLERS & ONLOAD INIT           *
      ****************************************************/
-    // Event listener for the Search button
+    // Search button
     searchButton.addEventListener('click', () => {
       const query = queryInput.value.trim();
       if (query) {
-        // Reset to the primary key on a new search
+        // Reset to primary key on a new search
         currentKeyIndex = 0;
         currentApiKey = apiKeys[currentKeyIndex];
         initClient(currentApiKey, () => {
@@ -306,7 +295,7 @@
       }
     });
 
-    // Event listener for the Next Page button
+    // Next page button
     nextButton.addEventListener('click', () => {
       const query = queryInput.value.trim();
       if (query && pageToken) {
@@ -314,7 +303,7 @@
       }
     });
 
-    // Load the API client library on window load
+    // Load the API client library when the window loads
     window.onload = function() {
       gapi.load('client', () => {
         initClient(currentApiKey, () => {
