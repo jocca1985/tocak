@@ -71,7 +71,7 @@
     }
     #video-details th { background-color: #f2f2f2; }
     #video-details img { max-width: 80px; }
-    /* Results List (if you want to also keep the simple list) */
+    /* Results List (optional) */
     #results { list-style: none; padding: 0; }
     #results li {
       background: #f9f9f9;
@@ -104,10 +104,10 @@
       <button id="next-button" disabled>Next</button>
     </section>
     
-    <!-- New Section for Detailed Video Info -->
+    <!-- Detailed Video Info Section -->
     <section id="video-details"></section>
     
-    <!-- Optional: Simple List for links -->
+    <!-- Optional: Simple List for video URLs -->
     <section>
       <ul id="results"></ul>
     </section>
@@ -116,10 +116,14 @@
   <!-- Load the Google API client library -->
   <script src="https://apis.google.com/js/api.js"></script>
   <script>
-    // Define your API keys
-    const primaryApiKey = 'AIzaSyD-DC9kq5vXWF6HrO9Uy-QSMxnVHYzuqoU';
-    const fallbackApiKey = 'AIzaSyDEL_B3gYUF33EkeSqkr8hPVMJ0L9mZGhw';
-    let currentApiKey = primaryApiKey;
+    // Define your API keys in order
+    const apiKeys = [
+      'AIzaSyD-DC9kq5vXWF6HrO9Uy-QSMxnVHYzuqoU',  // Primary
+      'AIzaSyDEL_B3gYUF33EkeSqkr8hPVMJ0L9mZGhw',  // Fallback 1
+      'AIzaSyBK2GkCrlII6IAHOgOh5XYhFkPHz1CAdIk'   // Fallback 2
+    ];
+    let currentKeyIndex = 0;
+    let currentApiKey = apiKeys[currentKeyIndex];
 
     let pageToken = '';
     const resultsContainer = document.getElementById('results');
@@ -147,14 +151,16 @@
       }
       const request = gapi.client.youtube.search.list(params);
       request.execute(response => {
+        // If a quota error is returned, try the next API key if available
         if (response.error && response.error.errors) {
-          let quotaError = response.error.errors.find(e => 
+          const quotaError = response.error.errors.find(e => 
             e.reason === "quotaExceeded" || e.reason === "dailyLimitExceeded"
           );
-          if (quotaError && currentApiKey === primaryApiKey) {
-            console.warn('Primary API key quota exceeded. Switching to fallback API key.');
-            currentApiKey = fallbackApiKey;
-            initClient(fallbackApiKey, () => {
+          if (quotaError && currentKeyIndex < apiKeys.length - 1) {
+            console.warn('Quota exceeded for key:', currentApiKey, 'Switching to next key.');
+            currentKeyIndex++;
+            currentApiKey = apiKeys[currentKeyIndex];
+            initClient(currentApiKey, () => {
               searchVideos(query, token);
             });
             return;
@@ -164,7 +170,7 @@
             return;
           }
         }
-        // Clear previous results if this is a new search
+        // If new search, clear previous results
         if (!token) {
           resultsContainer.innerHTML = '';
           videoDetailsContainer.innerHTML = '';
@@ -177,7 +183,7 @@
         response.result.items.forEach(item => {
           if (item.id && item.id.videoId) {
             videoIds.push(item.id.videoId);
-            // Optional: also show a simple list of video URLs
+            // Optional: Also show a simple list of video URLs
             const videoUrl = 'https://www.youtube.com/watch?v=' + item.id.videoId;
             const li = document.createElement('li');
             li.innerHTML = `<a href="${videoUrl}" target="_blank">${item.snippet.title}</a>`;
@@ -231,7 +237,7 @@
 
     // Utility: Format ISO8601 duration to H:MM:SS or MM:SS
     function formatDuration(isoDuration) {
-      // Example ISO8601 duration: PT1H2M3S or PT15M33S
+      // Example: PT1H2M3S or PT15M33S
       const matches = isoDuration.match(/PT(?:(\d+)H)?(?:(\d+)M)?(?:(\d+)S)?/);
       const hours = parseInt(matches[1] || 0, 10);
       const minutes = parseInt(matches[2] || 0, 10);
@@ -249,7 +255,12 @@
     searchButton.addEventListener('click', () => {
       const query = queryInput.value.trim();
       if (query) {
-        searchVideos(query);
+        // Reset to the primary key on a new search
+        currentKeyIndex = 0;
+        currentApiKey = apiKeys[currentKeyIndex];
+        initClient(currentApiKey, () => {
+          searchVideos(query);
+        });
       }
     });
 
@@ -264,8 +275,8 @@
     // Load the API client library when the window loads, starting with the primary API key
     window.onload = function() {
       gapi.load('client', () => {
-        initClient(primaryApiKey, () => {
-          console.log('YouTube API loaded with primary API key.');
+        initClient(currentApiKey, () => {
+          console.log('YouTube API loaded with key:', currentApiKey);
         });
       });
     };
