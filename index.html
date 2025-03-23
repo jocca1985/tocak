@@ -2,10 +2,9 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <title>YouTube Video Search (Improved CSS)</title>
+  <title>YouTube Video Search (Wider URL Column)</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <!-- Example: Montserrat + Open Sans -->
   <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;600&family=Open+Sans:wght@400;600&display=swap" rel="stylesheet">
 
   <style>
@@ -112,13 +111,19 @@
       max-width: 80px;
       border-radius: 4px;
     }
-    /* Make the URL wrap if it's too long */
-    #video-details td a {
+
+    /* Make the URL column wider */
+    .url-col {
+      width: 250px;       /* or whatever width you prefer */
+      min-width: 250px;
+      word-wrap: break-word; /* ensures text breaks if it exceeds the width */
+    }
+    /* Style the link in the URL column */
+    .url-col a {
       color: #1a0dab;
-      word-break: break-all;
       text-decoration: none;
     }
-    #video-details td a:hover {
+    .url-col a:hover {
       text-decoration: underline;
     }
   </style>
@@ -127,7 +132,7 @@
   <div class="container">
     <header>
       <h1>YouTube Video Search</h1>
-      <p>View video details with a clean, responsive layout.</p>
+      <p>View video details with a clean, responsive layout and a wider URL column.</p>
     </header>
     
     <section id="search-container">
@@ -145,8 +150,8 @@
   <script>
     /* 
       The JavaScript logic stays the same as your current code, 
-      only the CSS has changed. Below is the short version with 
-      the fallback logic. Replace your code as needed.
+      with fallback for 403. We only added the .url-col class 
+      in the table generation below.
     */
 
     // 1. Multiple API Keys for fallback
@@ -250,7 +255,9 @@
         }
 
         let tableHTML = '<table><thead><tr>';
-        tableHTML += '<th>Thumbnail</th><th>Title</th><th>Channel</th><th>Published</th><th>Views</th><th>Duration</th><th>URL</th>';
+        tableHTML += '<th>Thumbnail</th><th>Title</th><th>Channel</th><th>Published</th><th>Views</th><th>Duration</th>';
+        // Notice we add the .url-col class to the <th>
+        tableHTML += '<th class="url-col">URL</th>';
         tableHTML += '</tr></thead><tbody>';
 
         if (response.result && response.result.items) {
@@ -271,7 +278,8 @@
                 <td>${published}</td>
                 <td>${views}</td>
                 <td>${duration}</td>
-                <td><a href="${videoUrl}" target="_blank">${videoUrl}</a></td>
+                <!-- Also apply the .url-col class to the <td> -->
+                <td class="url-col"><a href="${videoUrl}" target="_blank">${videoUrl}</a></td>
               </tr>
             `;
           });
