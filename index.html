@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <title>YouTube Video Search</title>
+  <title>YouTube Video</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@300;400;500&display=swap" rel="stylesheet">
@@ -100,7 +100,7 @@
   <div class="container">
     <header>
       <h1>YouTube Video Search</h1>
-      <p>Automatically switch to the next API key on any 403, and view video details in a table with a URL column.</p>
+      <p>view video details with URL text.</p>
     </header>
     
     <section id="search-container">
@@ -252,7 +252,7 @@
                 <td>${published}</td>
                 <td>${views}</td>
                 <td>${duration}</td>
-                <td><a href="${videoUrl}" target="_blank">Watch</a></td>
+                <td><a href="${videoUrl}" target="_blank">${videoUrl}</a></td>
               </tr>
             `;
           });
