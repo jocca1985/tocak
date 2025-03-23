@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <title>YouTube Video Search Enhanced</title>
+  <title>YouTube Video Search with Multiple Key Fallback</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@300;400;500&display=swap" rel="stylesheet">
@@ -94,17 +94,18 @@
 <body>
   <div class="container">
     <header>
-      <h1>YouTube Video Search Enhanced</h1>
-      <p>Get detailed video info in a neat table view.</p>
+      <h1>YouTube Video Search (Multiple Key Fallback)</h1>
+      <p>Search videos, then fetch detailed info (stats, duration) in a table.</p>
     </header>
     
+    <!-- Search Controls -->
     <section id="search-container">
       <input type="text" id="query" placeholder="Search for videos...">
       <button id="search-button">Search</button>
       <button id="next-button" disabled>Next</button>
     </section>
     
-    <!-- Detailed Video Info Section -->
+    <!-- Detailed Video Info -->
     <section id="video-details"></section>
     
     <!-- Optional: Simple List for video URLs -->
@@ -116,7 +117,9 @@
   <!-- Load the Google API client library -->
   <script src="https://apis.google.com/js/api.js"></script>
   <script>
-    // Define your API keys in order
+    /****************************************************
+     *      1. SET UP MULTIPLE API KEYS AND FALLBACK    *
+     ****************************************************/
     const apiKeys = [
       'AIzaSyD-DC9kq5vXWF6HrO9Uy-QSMxnVHYzuqoU',  // Primary
       'AIzaSyDEL_B3gYUF33EkeSqkr8hPVMJ0L9mZGhw',  // Fallback 1
@@ -132,13 +135,17 @@
     const nextButton = document.getElementById('next-button');
     const queryInput = document.getElementById('query');
 
-    // Initialize the API client with a given API key
+    /****************************************************
+     *          2. INITIALIZE YOUTUBE CLIENT            *
+     ****************************************************/
     function initClient(apiKey, callback) {
       gapi.client.setApiKey(apiKey);
       gapi.client.load('youtube', 'v3', callback);
     }
 
-    // Function to perform a video search
+    /****************************************************
+     *          3. SEARCH VIDEOS (search.list)          *
+     ****************************************************/
     function searchVideos(query, token = '') {
       const params = {
         q: query,
@@ -150,10 +157,11 @@
         params.pageToken = token;
       }
       const request = gapi.client.youtube.search.list(params);
+
       request.execute(response => {
-        // If a quota error is returned, try the next API key if available
         if (response.error && response.error.errors) {
-          const quotaError = response.error.errors.find(e => 
+          // Check for quota errors
+          const quotaError = response.error.errors.find(e =>
             e.reason === "quotaExceeded" || e.reason === "dailyLimitExceeded"
           );
           if (quotaError && currentKeyIndex < apiKeys.length - 1) {
@@ -161,7 +169,7 @@
             currentKeyIndex++;
             currentApiKey = apiKeys[currentKeyIndex];
             initClient(currentApiKey, () => {
-              searchVideos(query, token);
+              searchVideos(query, token); // retry with new key
             });
             return;
           } else {
@@ -170,15 +178,18 @@
             return;
           }
         }
-        // If new search, clear previous results
+
+        // Clear previous results if this is a fresh search
         if (!token) {
           resultsContainer.innerHTML = '';
           videoDetailsContainer.innerHTML = '';
         }
+
         // Update pageToken for pagination
         pageToken = response.result.nextPageToken || '';
         nextButton.disabled = !pageToken;
-        // Extract video IDs from search results
+
+        // Extract video IDs
         const videoIds = [];
         response.result.items.forEach(item => {
           if (item.id && item.id.videoId) {
@@ -190,14 +201,17 @@
             resultsContainer.appendChild(li);
           }
         });
-        // Now get detailed info about the videos
+
+        // Get detailed info for these videos
         if (videoIds.length) {
           getVideoDetails(videoIds);
         }
       });
     }
 
-    // Function to get detailed video info using videos.list endpoint
+    /****************************************************
+     *    4. GET VIDEO DETAILS (videos.list)            *
+     ****************************************************/
     function getVideoDetails(videoIds) {
       const params = {
         part: 'snippet,statistics,contentDetails',
@@ -205,15 +219,33 @@
         maxResults: 50
       };
       const request = gapi.client.youtube.videos.list(params);
+
       request.execute(response => {
-        if (response.error) {
-          console.error('Error fetching video details:', response.error);
-          return;
+        if (response.error && response.error.errors) {
+          // Check for quota errors here too
+          const quotaError = response.error.errors.find(e =>
+            e.reason === "quotaExceeded" || e.reason === "dailyLimitExceeded"
+          );
+          if (quotaError && currentKeyIndex < apiKeys.length - 1) {
+            console.warn('Quota exceeded for key:', currentApiKey, 'Switching to next key.');
+            currentKeyIndex++;
+            currentApiKey = apiKeys[currentKeyIndex];
+            initClient(currentApiKey, () => {
+              getVideoDetails(videoIds); // retry with new key
+            });
+            return;
+          } else {
+            console.error('API Error:', response.error);
+            alert('Error: ' + response.error.message);
+            return;
+          }
         }
+
         // Build a table with the detailed info
         let tableHTML = '<table><thead><tr>';
         tableHTML += '<th>Thumbnail</th><th>Title</th><th>Channel</th><th>Published</th><th>Views</th><th>Duration</th>';
         tableHTML += '</tr></thead><tbody>';
+
         response.result.items.forEach(item => {
           const thumbnailUrl = item.snippet.thumbnails.default.url;
           const title = item.snippet.title;
@@ -221,27 +253,34 @@
           const published = new Date(item.snippet.publishedAt).toLocaleDateString();
           const views = item.statistics.viewCount || 'N/A';
           const duration = formatDuration(item.contentDetails.duration);
-          tableHTML += `<tr>
-                          <td><img src="${thumbnailUrl}" alt="Thumbnail"></td>
-                          <td>${title}</td>
-                          <td>${channel}</td>
-                          <td>${published}</td>
-                          <td>${views}</td>
-                          <td>${duration}</td>
-                        </tr>`;
+
+          tableHTML += `
+            <tr>
+              <td><img src="${thumbnailUrl}" alt="Thumbnail"></td>
+              <td>${title}</td>
+              <td>${channel}</td>
+              <td>${published}</td>
+              <td>${views}</td>
+              <td>${duration}</td>
+            </tr>
+          `;
         });
+
         tableHTML += '</tbody></table>';
         videoDetailsContainer.innerHTML = tableHTML;
       });
     }
 
-    // Utility: Format ISO8601 duration to H:MM:SS or MM:SS
+    /****************************************************
+     *     5. UTILITY: FORMAT ISO 8601 DURATIONS        *
+     ****************************************************/
     function formatDuration(isoDuration) {
       // Example: PT1H2M3S or PT15M33S
       const matches = isoDuration.match(/PT(?:(\d+)H)?(?:(\d+)M)?(?:(\d+)S)?/);
       const hours = parseInt(matches[1] || 0, 10);
       const minutes = parseInt(matches[2] || 0, 10);
       const seconds = parseInt(matches[3] || 0, 10);
+
       let formatted = '';
       if (hours > 0) {
         formatted += hours + ':' + (minutes < 10 ? '0' : '');
@@ -251,6 +290,9 @@
       return formatted;
     }
 
+    /****************************************************
+     *       6. SET UP BUTTONS & LOAD CLIENT            *
+     ****************************************************/
     // Event listener for the Search button
     searchButton.addEventListener('click', () => {
       const query = queryInput.value.trim();
@@ -272,7 +314,7 @@
       }
     });
 
-    // Load the API client library when the window loads, starting with the primary API key
+    // Load the API client library on window load
     window.onload = function() {
       gapi.load('client', () => {
         initClient(currentApiKey, () => {
