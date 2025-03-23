@@ -2,46 +2,33 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <title>YouTube Video Search</title>
+  <title>YouTube Video Search Enhanced</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@300;400;500&display=swap" rel="stylesheet">
   <style>
     /* Global Styles */
-    * {
-      box-sizing: border-box;
-      margin: 0;
-      padding: 0;
-    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
     body {
       font-family: 'Montserrat', sans-serif;
       background: linear-gradient(135deg, #667eea, #764ba2);
       min-height: 100vh;
-      display: flex;
-      align-items: center;
-      justify-content: center;
       padding: 20px;
     }
     .container {
       background: #fff;
       border-radius: 12px;
       box-shadow: 0 10px 20px rgba(0,0,0,0.2);
-      width: 100%;
-      max-width: 600px;
+      max-width: 900px;
+      margin: auto;
       padding: 2rem;
     }
     header {
       text-align: center;
       margin-bottom: 1.5rem;
     }
-    header h1 {
-      font-size: 2rem;
-      color: #333;
-      margin-bottom: 0.5rem;
-    }
-    header p {
-      color: #777;
-    }
+    header h1 { font-size: 2rem; color: #333; margin-bottom: 0.5rem; }
+    header p { color: #777; }
     /* Search Section */
     #search-container {
       display: flex;
@@ -56,10 +43,7 @@
       border-radius: 8px;
       transition: border-color 0.3s;
     }
-    #query:focus {
-      outline: none;
-      border-color: #667eea;
-    }
+    #query:focus { outline: none; border-color: #667eea; }
     button {
       padding: 0.75rem 1rem;
       border: none;
@@ -70,17 +54,25 @@
       cursor: pointer;
       transition: background 0.3s;
     }
-    button:hover {
-      background: #556cd6;
+    button:hover { background: #556cd6; }
+    button:disabled { background: #ccc; cursor: not-allowed; }
+    /* Video Details Table */
+    #video-details {
+      margin-bottom: 2rem;
     }
-    button:disabled {
-      background: #ccc;
-      cursor: not-allowed;
+    #video-details table {
+      width: 100%;
+      border-collapse: collapse;
     }
-    /* Results Section */
-    #results {
-      list-style: none;
+    #video-details th, #video-details td {
+      padding: 8px;
+      border: 1px solid #ddd;
+      text-align: left;
     }
+    #video-details th { background-color: #f2f2f2; }
+    #video-details img { max-width: 80px; }
+    /* Results List (if you want to also keep the simple list) */
+    #results { list-style: none; padding: 0; }
     #results li {
       background: #f9f9f9;
       padding: 1rem;
@@ -102,14 +94,20 @@
 <body>
   <div class="container">
     <header>
-      <h1>YouTube Video Search</h1>
-      <p>Discover videos with style and ease.</p>
+      <h1>YouTube Video Search Enhanced</h1>
+      <p>Get detailed video info in a neat table view.</p>
     </header>
+    
     <section id="search-container">
       <input type="text" id="query" placeholder="Search for videos...">
       <button id="search-button">Search</button>
       <button id="next-button" disabled>Next</button>
     </section>
+    
+    <!-- New Section for Detailed Video Info -->
+    <section id="video-details"></section>
+    
+    <!-- Optional: Simple List for links -->
     <section>
       <ul id="results"></ul>
     </section>
@@ -118,19 +116,22 @@
   <!-- Load the Google API client library -->
   <script src="https://apis.google.com/js/api.js"></script>
   <script>
+    // Define your API keys
+    const primaryApiKey = 'AIzaSyD-DC9kq5vXWF6HrO9Uy-QSMxnVHYzuqoU';
+    const fallbackApiKey = 'AIzaSyDEL_B3gYUF33EkeSqkr8hPVMJ0L9mZGhw';
+    let currentApiKey = primaryApiKey;
+
     let pageToken = '';
-    const API_KEY = 'AIzaSyDEL_B3gYUF33EkeSqkr8hPVMJ0L9mZGhw'; // Replace with your API key
     const resultsContainer = document.getElementById('results');
+    const videoDetailsContainer = document.getElementById('video-details');
     const searchButton = document.getElementById('search-button');
     const nextButton = document.getElementById('next-button');
     const queryInput = document.getElementById('query');
 
-    // Initialize the API client and load the YouTube API
-    function initClient() {
-      gapi.client.setApiKey(API_KEY);
-      gapi.client.load('youtube', 'v3', () => {
-        console.log('YouTube API loaded.');
-      });
+    // Initialize the API client with a given API key
+    function initClient(apiKey, callback) {
+      gapi.client.setApiKey(apiKey);
+      gapi.client.load('youtube', 'v3', callback);
     }
 
     // Function to perform a video search
@@ -146,28 +147,102 @@
       }
       const request = gapi.client.youtube.search.list(params);
       request.execute(response => {
-        if (response.error) {
-          console.error('API Error:', response.error);
-          alert('Error: ' + response.error.message);
-          return;
+        if (response.error && response.error.errors) {
+          let quotaError = response.error.errors.find(e => 
+            e.reason === "quotaExceeded" || e.reason === "dailyLimitExceeded"
+          );
+          if (quotaError && currentApiKey === primaryApiKey) {
+            console.warn('Primary API key quota exceeded. Switching to fallback API key.');
+            currentApiKey = fallbackApiKey;
+            initClient(fallbackApiKey, () => {
+              searchVideos(query, token);
+            });
+            return;
+          } else {
+            console.error('API Error:', response.error);
+            alert('Error: ' + response.error.message);
+            return;
+          }
         }
-        // If it's a new search, clear previous results
+        // Clear previous results if this is a new search
         if (!token) {
           resultsContainer.innerHTML = '';
+          videoDetailsContainer.innerHTML = '';
         }
-        // Update pageToken for the next page (if available)
+        // Update pageToken for pagination
         pageToken = response.result.nextPageToken || '';
         nextButton.disabled = !pageToken;
-        // Append each video result to the results list
+        // Extract video IDs from search results
+        const videoIds = [];
         response.result.items.forEach(item => {
           if (item.id && item.id.videoId) {
+            videoIds.push(item.id.videoId);
+            // Optional: also show a simple list of video URLs
             const videoUrl = 'https://www.youtube.com/watch?v=' + item.id.videoId;
             const li = document.createElement('li');
             li.innerHTML = `<a href="${videoUrl}" target="_blank">${item.snippet.title}</a>`;
             resultsContainer.appendChild(li);
           }
         });
+        // Now get detailed info about the videos
+        if (videoIds.length) {
+          getVideoDetails(videoIds);
+        }
       });
+    }
+
+    // Function to get detailed video info using videos.list endpoint
+    function getVideoDetails(videoIds) {
+      const params = {
+        part: 'snippet,statistics,contentDetails',
+        id: videoIds.join(','),
+        maxResults: 50
+      };
+      const request = gapi.client.youtube.videos.list(params);
+      request.execute(response => {
+        if (response.error) {
+          console.error('Error fetching video details:', response.error);
+          return;
+        }
+        // Build a table with the detailed info
+        let tableHTML = '<table><thead><tr>';
+        tableHTML += '<th>Thumbnail</th><th>Title</th><th>Channel</th><th>Published</th><th>Views</th><th>Duration</th>';
+        tableHTML += '</tr></thead><tbody>';
+        response.result.items.forEach(item => {
+          const thumbnailUrl = item.snippet.thumbnails.default.url;
+          const title = item.snippet.title;
+          const channel = item.snippet.channelTitle;
+          const published = new Date(item.snippet.publishedAt).toLocaleDateString();
+          const views = item.statistics.viewCount || 'N/A';
+          const duration = formatDuration(item.contentDetails.duration);
+          tableHTML += `<tr>
+                          <td><img src="${thumbnailUrl}" alt="Thumbnail"></td>
+                          <td>${title}</td>
+                          <td>${channel}</td>
+                          <td>${published}</td>
+                          <td>${views}</td>
+                          <td>${duration}</td>
+                        </tr>`;
+        });
+        tableHTML += '</tbody></table>';
+        videoDetailsContainer.innerHTML = tableHTML;
+      });
+    }
+
+    // Utility: Format ISO8601 duration to H:MM:SS or MM:SS
+    function formatDuration(isoDuration) {
+      // Example ISO8601 duration: PT1H2M3S or PT15M33S
+      const matches = isoDuration.match(/PT(?:(\d+)H)?(?:(\d+)M)?(?:(\d+)S)?/);
+      const hours = parseInt(matches[1] || 0, 10);
+      const minutes = parseInt(matches[2] || 0, 10);
+      const seconds = parseInt(matches[3] || 0, 10);
+      let formatted = '';
+      if (hours > 0) {
+        formatted += hours + ':' + (minutes < 10 ? '0' : '');
+      }
+      formatted += minutes + ':' + (seconds < 10 ? '0' : '');
+      formatted += seconds;
+      return formatted;
     }
 
     // Event listener for the Search button
@@ -178,7 +253,7 @@
       }
     });
 
-    // Event listener for the Next button
+    // Event listener for the Next Page button
     nextButton.addEventListener('click', () => {
       const query = queryInput.value.trim();
       if (query && pageToken) {
@@ -186,9 +261,13 @@
       }
     });
 
-    // Load the API client library when the window loads
+    // Load the API client library when the window loads, starting with the primary API key
     window.onload = function() {
-      gapi.load('client', initClient);
+      gapi.load('client', () => {
+        initClient(primaryApiKey, () => {
+          console.log('YouTube API loaded with primary API key.');
+        });
+      });
     };
   </script>
 </body>
