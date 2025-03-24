@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <title>YouTube Video Search (Export, Clear on Next)</title>
+  <title>YouTube Video Search (URL-Only Export)</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;600&family=Open+Sans:wght@400;600&display=swap" rel="stylesheet">
@@ -131,7 +131,7 @@
   <div class="container">
     <header>
       <h1>YouTube Video Search</h1>
-      <p>Export results to Excel (CSV), clear old results on Next, and note that max results per request is 50.</p>
+      <p>Exports only the URL column to CSV. The table shows all columns, but export includes URLs only.</p>
     </header>
     
     <section id="search-container">
@@ -175,16 +175,16 @@
     }
 
     /****************************************************
-     * 3. SEARCH VIDEOS (search.list) WITH CLEAR ON NEXT *
+     * 3. SEARCH VIDEOS (search.list), CLEAR ON NEXT     *
      ****************************************************/
     function searchVideos(query, token = '') {
-      // Always clear previous results (including on Next)
+      // Clear old results before fetching new ones (including on Next)
       videoDetailsContainer.innerHTML = '';
 
       const params = {
         q: query,
         part: 'snippet',
-        maxResults: 50, // 50 is the max allowed by the YouTube search.list API
+        maxResults: 50, // 50 is the max allowed by the YouTube search.list endpoint
         type: 'video'
       };
       if (token) {
@@ -195,13 +195,13 @@
       request.execute(response => {
         if (response.error) {
           console.error('API Error:', response.error);
-          // If it's a 403, try the next key if available
+          // Fallback if 403
           if (response.error.code === 403 && currentKeyIndex < apiKeys.length - 1) {
             console.warn('Got 403 for key:', currentApiKey, 'Switching to next key.');
             currentKeyIndex++;
             currentApiKey = apiKeys[currentKeyIndex];
             initClient(currentApiKey, () => {
-              searchVideos(query, token); // retry with new key
+              searchVideos(query, token); // retry
             });
             return;
           } else {
@@ -214,7 +214,7 @@
         pageToken = response.result.nextPageToken || '';
         nextButton.disabled = !pageToken;
 
-        // Collect video IDs
+        // Gather video IDs
         const videoIds = [];
         if (response.result && response.result.items) {
           response.result.items.forEach(item => {
@@ -223,12 +223,9 @@
             }
           });
         }
-
-        // Fetch details if we have IDs
         if (videoIds.length) {
           getVideoDetails(videoIds);
         } else {
-          // If no results, disable export
           exportButton.disabled = true;
         }
       });
@@ -253,7 +250,7 @@
             currentKeyIndex++;
             currentApiKey = apiKeys[currentKeyIndex];
             initClient(currentApiKey, () => {
-              getVideoDetails(videoIds); // retry with new key
+              getVideoDetails(videoIds); // retry
             });
             return;
           } else {
@@ -293,36 +290,46 @@
         tableHTML += '</tbody></table>';
         videoDetailsContainer.innerHTML = tableHTML;
 
-        // If we got results, enable Export
+        // Enable Export if we have data
         exportButton.disabled = false;
       });
     }
 
     /****************************************************
-     * 5. EXPORT TABLE TO EXCEL (CSV)                   *
+     * 5. EXPORT: URL ONLY                              *
      ****************************************************/
-    function exportToExcel(filename = 'YouTubeResults.csv') {
+    function exportToExcel(filename = 'YouTubeURLs.csv') {
+      // We only export the URL column
       const table = document.querySelector("#video-details table");
       if (!table) {
         alert('No table data to export.');
         return;
       }
-      let csv = [];
-      const rows = table.querySelectorAll("tr");
 
-      for (let i = 0; i < rows.length; i++) {
-        let row = [], cols = rows[i].querySelectorAll("th, td");
-        for (let j = 0; j < cols.length; j++) {
-          // Escape quotes
-          let text = cols[j].innerText.replace(/"/g, '""');
-          row.push(`"${text}"`);
+      // Prepare CSV array
+      const csvLines = [];
+      // Add header
+      csvLines.push('"URL"');
+
+      // Get all rows in <tbody>
+      const rows = table.querySelectorAll("tbody tr");
+      rows.forEach(row => {
+        const urlTd = row.querySelector(".url-col a");
+        if (urlTd) {
+          // We export only the href (or you can use urlTd.textContent if you prefer the displayed text)
+          const url = urlTd.href;
+          // Escape any quotes in the URL
+          const safeUrl = url.replace(/"/g, '""');
+          csvLines.push(`"${safeUrl}"`);
         }
-        csv.push(row.join(","));
-      }
-      const csvString = csv.join("\n");
+      });
+
+      // Convert array to CSV string
+      const csvString = csvLines.join("\n");
       const blob = new Blob([csvString], { type: 'text/csv' });
       const url = window.URL.createObjectURL(blob);
 
+      // Create a temporary download link
       const link = document.createElement("a");
       link.setAttribute("href", url);
       link.setAttribute("download", filename);
@@ -337,7 +344,6 @@
      * 6. UTILITY: FORMAT ISO 8601 DURATIONS            *
      ****************************************************/
     function formatDuration(isoDuration) {
-      // Examples: PT1H2M3S, PT15M33S
       const matches = isoDuration.match(/PT(?:(\d+)H)?(?:(\d+)M)?(?:(\d+)S)?/);
       const hours = parseInt(matches?.[1] || 0, 10);
       const minutes = parseInt(matches?.[2] || 0, 10);
@@ -359,7 +365,6 @@
     searchButton.addEventListener('click', () => {
       const query = queryInput.value.trim();
       if (query) {
-        // Reset to the first key on a new search
         currentKeyIndex = 0;
         currentApiKey = apiKeys[currentKeyIndex];
         initClient(currentApiKey, () => {
